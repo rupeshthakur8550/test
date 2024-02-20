@@ -11,19 +11,17 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to the database before starting the server
-connectToDatabase((err) => {
-  if (err) {
-    console.error('Error connecting to database:', err);
-    process.exit(1); // Exit the process if unable to connect to the database
-  } else {
-    // Start the server
-    app.use('/api', addressRoutes);
-    app.use('/api', technicianRoutes);
-    app.use('/api', shortestRoutes); 
+connectToDatabase().then((db) => {
+  // Add routes after successfully connecting to the database
+  app.use('/api', addressRoutes);
+  app.use('/api', technicianRoutes);
+  app.use('/api', shortestRoutes); 
 
-    const port = 3001;
-    app.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
-    });
-  }
+  const port = process.env.PORT || 3001; // Use the port specified by the environment variable PORT or default to 3001
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}).catch((err) => {
+  console.error('Error connecting to database:', err);
+  process.exit(1); // Exit the process if unable to connect to the database
 });

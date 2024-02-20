@@ -5,13 +5,13 @@ const bucketName = 'cyclic-weak-cyan-bighorn-sheep-cap-us-west-2';
 const databaseFileName = 'database.db';
 
 // Set AWS credentials
-const AWS_ACCESS_KEY_ID = 'YOUR_AWS_ACCESS_KEY_ID';
-const AWS_SECRET_ACCESS_KEY = 'YOUR_AWS_SECRET_ACCESS_KEY';
-const AWS_SESSION_TOKEN = 'YOUR_AWS_SESSION_TOKEN';
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+const AWS_SESSION_TOKEN = process.env.AWS_SESSION_TOKEN;
 
 // Initialize AWS SDK with credentials
 const s3 = new AWS.S3({
-  region: 'us-west-2',
+  region: process.env.AWS_REGION, // Typo fix: Change process.en.AWS_REGION to process.env.AWS_REGION
   accessKeyId: AWS_ACCESS_KEY_ID,
   secretAccessKey: AWS_SECRET_ACCESS_KEY,
   sessionToken: AWS_SESSION_TOKEN
@@ -53,7 +53,7 @@ export const uploadDatabaseToS3 = (dbBuffer, callback) => {
 };
 
 // Connect to the SQLite database
-export default const connectToDatabase = (callback) => {
+export const connectToDatabase = (callback) => {
   downloadDatabaseFromS3((err, dbBuffer) => {
     if (err) {
       console.error('Error connecting to database:', err);

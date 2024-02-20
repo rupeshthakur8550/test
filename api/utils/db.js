@@ -1,15 +1,15 @@
 import sqlite3 from "sqlite3";
-import { S3 } from 's3fs';
+import S3FS from 's3fs';
 import { Readable } from 'stream';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const bucketName = "your-bucket-name";
+const bucketName = process.env.CYCLIC_BUCKET_NAME;
 const databaseFileName = 'database.db';
 
 // Initialize s3fs with AWS credentials
-const s3fs = new S3({
+const s3fs = new S3FS(bucketName, {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
@@ -37,7 +37,7 @@ const downloadDatabaseFromS3 = async () => {
   }
 };
 
-// Create and store the database file in AWS storage
+// Function to create and store the database file in AWS storage
 const createAndStoreDatabase = async () => {
   const db = new sqlite3.Database(':memory:');
 
@@ -76,18 +76,13 @@ const createAndStoreDatabase = async () => {
 // Connect to the SQLite database
 const connectToDatabase = async () => {
   try {
+    // Download the database file from S3
     const dbBuffer = await downloadDatabaseFromS3();
 
     // Connect to the SQLite database
-    const db = new sqlite3.Database(dbBuffer, sqlite3.OPEN_READWRITE, (err) => {
-      if (err) {
-        console.error('Error connecting to database:', err);
-        throw err;
-      } else {
-        console.log('Connected to the database');
-      }
-    });
-
+    const db = new sqlite3.Database(':memory:');
+    db.run(dbBuffer.toString()); // Run the SQL commands to create tables
+    console.log('Connected to the database');
     return db;
   } catch (err) {
     console.error('Error connecting to database:', err);
@@ -98,5 +93,6 @@ const connectToDatabase = async () => {
 // Export the connection function for use in routes
 export { connectToDatabase };
 
-// Create and store the database
-createAndStoreDatabase();
+// Connect to the SQLite database and store it in AWS S3
+createAndStoreDatabase()
+  .catch(err => console.error('Error:', err));

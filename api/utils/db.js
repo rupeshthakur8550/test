@@ -1,5 +1,5 @@
 import sqlite3 from "sqlite3";
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
@@ -18,32 +18,16 @@ const s3Client = new S3Client({
   }
 });
 
-// Function to upload the SQLite database file to AWS S3
-const uploadDatabaseToS3 = async (filePath) => {
-  try {
-    const fileStream = fs.createReadStream(filePath);
-    const params = {
-      Bucket: bucketName,
-      Key: databaseFileName,
-      Body: fileStream,
-    };
-    await s3Client.send(new PutObjectCommand(params));
-    console.log(`Database file ${databaseFileName} uploaded successfully to S3 bucket.`);
-  } catch (err) {
-    console.error('Error uploading file to S3:', err);
-    throw err;
-  }
-};
-
 // Function to download the SQLite database file from AWS S3
-const downloadDatabaseFromS3 = async () => {
+const downloadDatabaseFromS3 = async (filePath) => {
   try {
     const params = {
       Bucket: bucketName,
       Key: databaseFileName,
     };
     const response = await s3Client.send(new GetObjectCommand(params));
-    return response.Body;
+    fs.writeFileSync(filePath, response.Body);
+    console.log(`Database file ${databaseFileName} downloaded successfully from S3.`);
   } catch (err) {
     console.error('Error downloading file from S3:', err);
     throw err;
@@ -51,30 +35,19 @@ const downloadDatabaseFromS3 = async () => {
 };
 
 // Connect to the SQLite database
-const connectToDatabase = async () => {
-  try {
-    const tempDbFileName = 'database.db'; // Temporary file path
-    await downloadDatabaseFromS3(tempDbFileName);
+export const connectToDatabase = async () => {
+  const tempDbFileName = 'temp-database.db'; // Temporary file path
+  await downloadDatabaseFromS3(tempDbFileName);
 
-    // Connect to the SQLite database
-    const db = new sqlite3.Database(tempDbFileName, sqlite3.OPEN_READWRITE, (err) => {
-      if (err) {
-        console.error('Error connecting to database:', err);
-        throw err;
-      } else {
-        console.log('Connected to the database');
-      }
-    });
+  // Connect to the SQLite database
+  const db = new sqlite3.Database(tempDbFileName, sqlite3.OPEN_READWRITE, (err) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      throw err;
+    } else {
+      console.log('Connected to the database');
+    }
+  });
 
-    return db;
-  } catch (err) {
-    console.error('Error connecting to database:', err);
-    throw err;
-  }
+  return db;
 };
-
-// Export the connection function for use in routes
-export { connectToDatabase };
-
-// Call the function to connect to the database
-connectToDatabase(); // This will connect to the database on startup

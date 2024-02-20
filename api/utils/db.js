@@ -1,7 +1,8 @@
 import sqlite3 from "sqlite3";
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import fs from 'fs';
 import dotenv from 'dotenv';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import S3FS from 's3fs';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -18,15 +19,23 @@ const s3Client = new S3Client({
   }
 });
 
-// Function to download the SQLite database file from AWS S3
+// Function to download the SQLite database file from AWS S3 using s3fs
 const downloadDatabaseFromS3 = async (filePath) => {
   try {
-    const params = {
-      Bucket: bucketName,
-      Key: databaseFileName,
-    };
-    const response = await s3Client.send(new GetObjectCommand(params));
-    fs.writeFileSync(filePath, response.Body);
+    const s3fs = new S3FS(bucketName, {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    });
+
+    const readStream = s3fs.createReadStream(databaseFileName);
+    const writeStream = fs.createWriteStream(filePath);
+
+    await new Promise((resolve, reject) => {
+      readStream.pipe(writeStream);
+      readStream.on('error', reject);
+      writeStream.on('finish', resolve);
+    });
+
     console.log(`Database file ${databaseFileName} downloaded successfully from S3.`);
   } catch (err) {
     console.error('Error downloading file from S3:', err);
@@ -34,9 +43,35 @@ const downloadDatabaseFromS3 = async (filePath) => {
   }
 };
 
+// Function to upload the SQLite database file to AWS S3 using s3fs
+const uploadDatabaseToS3 = async (filePath) => {
+  try {
+    const s3fs = new S3FS(bucketName, {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    });
+
+    const readStream = fs.createReadStream(filePath);
+    const writeStream = s3fs.createWriteStream(databaseFileName);
+
+    await new Promise((resolve, reject) => {
+      readStream.pipe(writeStream);
+      readStream.on('error', reject);
+      writeStream.on('finish', resolve);
+    });
+
+    console.log(`Database file ${databaseFileName} uploaded successfully to S3.`);
+  } catch (err) {
+    console.error('Error uploading file to S3:', err);
+    throw err;
+  }
+};
+
 // Connect to the SQLite database
 export const connectToDatabase = async () => {
   const tempDbFileName = 'temp-database.db'; // Temporary file path
+
+  // Download the database file from S3
   await downloadDatabaseFromS3(tempDbFileName);
 
   // Connect to the SQLite database
@@ -51,3 +86,6 @@ export const connectToDatabase = async () => {
 
   return db;
 };
+
+// Call the function to connect to the database
+connectToDatabase(); // This will connect to the database on startup

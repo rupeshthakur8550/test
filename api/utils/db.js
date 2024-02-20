@@ -1,20 +1,24 @@
 import AWS from 'aws-sdk';
 import sqlite3 from 'sqlite3';
+import dotenv from 'dotenv';
 
-const bucketName = 'cyclic-weak-cyan-bighorn-sheep-cap-us-west-2';
+dotenv.config();
+
+const bucketName = process.env.BUCKET;
 const databaseFileName = 'database.db';
 
-// Set AWS credentials
-const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
-const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
-const AWS_SESSION_TOKEN = process.env.AWS_SESSION_TOKEN;
+// Check if environment variables are set
+if (!bucketName || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_SESSION_TOKEN || !process.env.AWS_REGION) {
+  console.error('Missing required environment variables.');
+  process.exit(1);
+}
 
 // Initialize AWS SDK with credentials
 const s3 = new AWS.S3({
-  region: process.env.AWS_REGION, // Typo fix: Change process.en.AWS_REGION to process.env.AWS_REGION
-  accessKeyId: AWS_ACCESS_KEY_ID,
-  secretAccessKey: AWS_SECRET_ACCESS_KEY,
-  sessionToken: AWS_SESSION_TOKEN
+  region: process.env.AWS_REGION,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  sessionToken: process.env.AWS_SESSION_TOKEN
 });
 
 // Function to download the SQLite database file from AWS S3

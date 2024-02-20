@@ -4,9 +4,6 @@ import addressRoutes from './routes/addressRoutes.js';
 import technicianRoutes from './routes/technicianRoutes.js';
 import shortestPath from './routes/shortestPath.js';
 import cors from 'cors';
-import dotenv from 'dotenv';
-
-dotenv.config(); 
 
 const app = express();
 

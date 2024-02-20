@@ -5,7 +5,7 @@ const bucketName = 'cyclic-weak-cyan-bighorn-sheep-cap-us-west-2';
 const databaseFileName = 'database.db';
 
 // Set AWS credentials
-const AWS_ACCESS_KEY_ID = '';
+const AWS_ACCESS_KEY_ID = 'YOUR_AWS_ACCESS_KEY_ID';
 const AWS_SECRET_ACCESS_KEY = 'YOUR_AWS_SECRET_ACCESS_KEY';
 const AWS_SESSION_TOKEN = 'YOUR_AWS_SESSION_TOKEN';
 

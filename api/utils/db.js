@@ -1,5 +1,6 @@
-import AWS from 'aws-sdk';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sqlite3 from 'sqlite3';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,70 +14,68 @@ if (!bucketName || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACC
   process.exit(1);
 }
 
-// Initialize AWS SDK with credentials
-const s3 = new AWS.S3({
+// Initialize AWS SDK v3 S3 client
+const s3Client = new S3Client({
   region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  sessionToken: process.env.AWS_SESSION_TOKEN
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    sessionToken: process.env.AWS_SESSION_TOKEN
+  }
 });
 
-// Function to download the SQLite database file from AWS S3
-export const downloadDatabaseFromS3 = (callback) => {
-  const params = {
-    Bucket: bucketName,
-    Key: databaseFileName,
-  };
-
-  s3.getObject(params, (err, data) => {
-    if (err) {
-      console.error('Error downloading file from S3:', err);
-      callback(err, null);
-    } else {
-      callback(null, data.Body);
-    }
-  });
-};
-
 // Function to upload the SQLite database file to AWS S3
-export const uploadDatabaseToS3 = (dbBuffer, callback) => {
-  const params = {
-    Bucket: bucketName,
-    Key: databaseFileName,
-    Body: dbBuffer,
-  };
-
-  s3.upload(params, (err, data) => {
-    if (err) {
-      console.error('Error uploading file to S3:', err);
-      callback(err);
-    } else {
-      callback(null);
-    }
-  });
+export const uploadDatabaseToS3 = async (dbBuffer) => {
+  try {
+    const params = {
+      Bucket: bucketName,
+      Key: databaseFileName,
+      Body: dbBuffer,
+    };
+    await s3Client.send(new PutObjectCommand(params));
+    console.log(`Database file ${databaseFileName} uploaded successfully to S3 bucket.`);
+  } catch (err) {
+    console.error('Error uploading file to S3:', err);
+    throw err;
+  }
 };
 
-// Connect to the SQLite database
-export const connectToDatabase = (callback) => {
-  downloadDatabaseFromS3((err, dbBuffer) => {
-    if (err) {
-      console.error('Error connecting to database:', err);
-      callback(err, null);
-    } else {
-      // Write the downloaded database buffer to a temporary file
-      const tempDbFileName = '/tmp/temp-database.db'; // Update with your desired temporary file path
-      require('fs').writeFileSync(tempDbFileName, dbBuffer);
-
-      // Connect to the SQLite database
-      const db = new sqlite3.Database(tempDbFileName, sqlite3.OPEN_READWRITE, (err) => {
-        if (err) {
-          console.error('Error connecting to database:', err);
-          callback(err, null);
-        } else {
-          console.log('Connected to the database');
-          callback(null, db);
-        }
-      });
+// Connect to the SQLite database directly from AWS S3
+export const connectToDatabase = async () => {
+  try {
+    // Check if the file exists in S3, if not, upload it
+    const params = {
+      Bucket: bucketName,
+      Key: databaseFileName,
+    };
+    let dbBuffer;
+    try {
+      const data = await s3Client.send(new GetObjectCommand(params));
+      dbBuffer = data.Body;
+    } catch (err) {
+      console.log(`Database file ${databaseFileName} does not exist in S3 bucket. Uploading it...`);
+      // Assuming you have a local 'database.db' file, you can read it and upload it
+      dbBuffer = fs.readFileSync('database.db');
+      await uploadDatabaseToS3(dbBuffer);
     }
-  });
+    
+    // Write the downloaded database buffer to a temporary file
+    const tempDbFileName = '/tmp/temp-database.db'; // Update with your desired temporary file path
+    fs.writeFileSync(tempDbFileName, dbBuffer);
+
+    // Connect to the SQLite database
+    const db = new sqlite3.Database(tempDbFileName, sqlite3.OPEN_READWRITE, (err) => {
+      if (err) {
+        console.error('Error connecting to database:', err);
+        throw err;
+      } else {
+        console.log('Connected to the database');
+      }
+    });
+
+    return db;
+  } catch (err) {
+    console.error('Error connecting to database:', err);
+    throw err;
+  }
 };

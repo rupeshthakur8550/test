@@ -12,6 +12,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.515.0",
+    "@aws-sdk/credential-provider-node": "^3.515.0",
     "aws-sdk": "^2.1560.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",

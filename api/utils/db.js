@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const bucketName = process.env.BUCKET;
+const bucketName = process.env.CYCLIC_BUCKET_NAME;
 const databaseFileName = 'database.db';
 
 // Check if environment variables are set

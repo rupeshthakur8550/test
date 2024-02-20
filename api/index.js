@@ -2,7 +2,7 @@ import express from 'express';
 import { connectToDatabase } from './utils/db.js';
 import addressRoutes from './routes/addressRoutes.js';
 import technicianRoutes from './routes/technicianRoutes.js';
-import shortestPathRouter from './routes/shortestPath.js'; // Update import
+import shortestRoutes from './routes/shortestPath.js'; 
 import cors from 'cors';
 
 const app = express();
@@ -19,7 +19,7 @@ connectToDatabase((err) => {
     // Start the server
     app.use('/api', addressRoutes);
     app.use('/api', technicianRoutes);
-    app.use('/api', shortestPathRouter); // Use shortestPathRouter
+    app.use('/api', shortestRoutes); 
 
     const port = process.env.PORT || 3001;
     app.listen(port, () => {

@@ -39,7 +39,7 @@ const downloadDatabaseFromS3 = async () => {
 
 // Function to create and store the database file in AWS storage
 const createAndStoreDatabase = async () => {
-  const db = new sqlite3.Database(':memory:');
+  const db = new sqlite3.Database('database.db');
 
   // Create tables
   db.serialize(() => {

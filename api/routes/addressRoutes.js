@@ -1,5 +1,5 @@
 import express from 'express';
-import { connectToDatabase } from '../utils/db.js';
+import { db } from '../utils/db.js';
 
 const router = express.Router();
 
@@ -8,8 +8,6 @@ router.post('/address', async (req, res) => {
   const { address, longitude, latitude, technician_id } = req.body;
 
   try {
-    const db = await connectToDatabase();
-
     db.run(`INSERT INTO address (address, longitude, latitude, technician_id) 
       VALUES (?, ?, ?, ?)`, [address, longitude, latitude, technician_id], (err) => {
       if (err) {
@@ -30,8 +28,6 @@ router.get('/address/:technician_id', async (req, res) => {
   const technician_id = req.params.technician_id;
 
   try {
-    const db = await connectToDatabase();
-
     db.all(`SELECT address, longitude, latitude FROM address WHERE technician_id = ?`, [technician_id], (err, rows) => {
       if (err) {
         console.error(err.message);
@@ -51,8 +47,6 @@ router.delete('/address/:technician_id', async (req, res) => {
   const technician_id = req.params.technician_id;
 
   try {
-    const db = await connectToDatabase();
-
     db.run(`DELETE FROM address WHERE technician_id = ?`, [technician_id], (err) => {
       if (err) {
         console.error(err.message);

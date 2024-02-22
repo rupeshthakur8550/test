@@ -1,5 +1,5 @@
 import express from 'express';
-import { connectToDatabase } from '../utils/db.js';
+import { db } from '../utils/db.js';
 
 const router = express.Router();
 
@@ -61,25 +61,19 @@ function calculateShortestPath(locations) {
 }
 
 const getAddressByTechnicianId = (technician_id, callback) => {
-  connectToDatabase((err, db) => {
+  db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
+          FROM technician 
+          WHERE id = ?
+          UNION
+          SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
+          FROM address 
+          WHERE technician_id = ? 
+          ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
     if (err) {
+      console.error(err.message);
       callback(err, null);
     } else {
-      db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
-              FROM technician 
-              WHERE id = ?
-              UNION
-              SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
-              FROM address 
-              WHERE technician_id = ? 
-              ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
-        if (err) {
-          console.error(err.message);
-          callback(err, null);
-        } else {
-          callback(null, rows);
-        }
-      });
+      callback(null, rows);
     }
   });
 };

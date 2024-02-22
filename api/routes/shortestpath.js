@@ -1,5 +1,5 @@
 import express from "express";
-import db from '../utils/db.js';
+import { connectToDatabase } from '../utils/db.js';
 
 const router = express.Router();
 
@@ -36,7 +36,7 @@ function findNearestNeighbor(location, addresses) {
 }
 
 // Function to calculate the shortest path
-function calculateShortestPath(locations) {
+async function calculateShortestPath(locations) {
   // Get the technician's location from the first element of the locations array
   const technicianLocation = locations[0];
 
@@ -60,37 +60,44 @@ function calculateShortestPath(locations) {
   return resultData;
 }
 
-const getAddressByTechnicianId = (technician_id, callback) => {
-  db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
-        FROM technician 
-        WHERE id = ?
-        UNION
-        SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
-        FROM address 
-        WHERE technician_id = ? 
-        ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
-    if (err) {
-      console.error(err.message);
-      callback(err, null);
-    } else {
-      callback(null, rows);
-    }
+// Function to get address data by technician ID from the database
+async function getAddressByTechnicianId(technician_id) {
+  const db = await connectToDatabase();
+  
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
+          FROM technician 
+          WHERE id = ?
+          UNION
+          SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
+          FROM address 
+          WHERE technician_id = ? 
+          ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
+      if (err) {
+        console.error(err.message);
+        reject(err);
+      } else {
+        resolve(rows);
+      }
+    });
   });
-};
+}
 
 // Usage example
-router.get('/shortestpath/:technician_id', (req, res) => {
+router.get('/shortestpath/:technician_id', async (req, res) => {
   const technician_id = req.params.technician_id;
 
-  getAddressByTechnicianId(technician_id, (err, data) => {
-    if (err) {
-      res.status(500).json({ error: 'Error retrieving data from the address table' });
-    } else {
-      // Calculate shortest path
-      const shortestPath = calculateShortestPath(data);
-      res.status(200).json(shortestPath);
-    }
-  });
+  try {
+    // Retrieve address data by technician ID
+    const data = await getAddressByTechnicianId(technician_id);
+    
+    // Calculate shortest path
+    const shortestPath = await calculateShortestPath(data);
+    
+    res.status(200).json(shortestPath);
+  } catch (err) {
+    res.status(500).json({ error: 'Error retrieving data from the address table' });
+  }
 });
 
 export default router;

@@ -1,7 +1,9 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import fs from 'fs';
-import sqlite3, {OPEN_READWRITE} from 'sqlite3';
+import sqlite3 from 'sqlite3';
 import dotenv from 'dotenv';
+
+const { OPEN_READWRITE } = sqlite3;
 
 dotenv.config();
 

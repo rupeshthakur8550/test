@@ -1,61 +1,67 @@
 import express from 'express';
-import db from '../utils/db.js';
+import { connectToDatabase } from '../utils/db.js';
 
 const router = express.Router();
 
 // Route to insert a new technician
-router.post('/technician', (req, res) => {
+router.post('/technician', async (req, res) => {
     const { location, longitude, latitude } = req.body;
+    const db = await connectToDatabase();
 
-    db.run(`INSERT INTO technician (location, longitude, latitude) 
-          VALUES (?, ?, ?)`, [location, longitude, latitude], function(err) {
-        if (err) {
-            console.error(err.message);
-            res.status(500).send('Error inserting data into the technician table');
-        } else {
-            console.log(`Inserted a row with the ID: ${this.lastID}`);
-            if (this.lastID) {
-                res.status(200).json({ technician_id: this.lastID });
-            } else {
-                res.status(500).send('No result returned from the database');
-            }
-        }
-    });
+    try {
+        await db.run(`INSERT INTO technician (location, longitude, latitude) 
+            VALUES (?, ?, ?)`, [location, longitude, latitude]);
+        const lastID = this.lastID;
+        db.close();
+        console.log(`Inserted a row with the ID: ${lastID}`);
+        res.status(200).json({ technician_id: lastID });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Error inserting data into the technician table');
+    } finally {
+        db.close();
+    }
 });
 
 // Route to update completion status to 1 for a provided technician ID
-router.put('/technician/:technician_id/completion', (req, res) => {
+router.put('/technician/:technician_id/completion', async (req, res) => {
     const technician_id = req.params.technician_id;
+    const db = await connectToDatabase();
 
-    db.run(`UPDATE technician SET completion_status = 1 WHERE id = ?`, [technician_id], function(err) {
-        if (err) {
-            console.error(err.message);
-            res.status(500).send('Error updating completion status for the provided technician ID');
+    try {
+        const result = await db.run(`UPDATE technician SET completion_status = 1 WHERE id = ?`, [technician_id]);
+        db.close();
+        if (result.changes > 0) {
+            res.status(200).json({ message: 'Completion status updated successfully' });
         } else {
-            if (this.changes > 0) {
-                res.status(200).json({ message: 'Completion status updated successfully' });
-            } else {
-                res.status(404).send('Technician ID not found');
-            }
+            res.status(404).send('Technician ID not found');
         }
-    });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Error updating completion status for the provided technician ID');
+    } finally {
+        db.close();
+    }
 });
 
-router.delete('/technician/:technician_id', (req, res) => {
+router.delete('/technician/:technician_id', async (req, res) => {
     const technician_id = req.params.technician_id;
+    const db = await connectToDatabase();
 
-    db.run(`DELETE FROM technician WHERE id = ?`, [technician_id], function(err) {
-        if (err) {
-            console.error(err.message);
-            res.status(500).send('Error deleting entry for the provided technician ID');
+    try {
+        const result = await db.run(`DELETE FROM technician WHERE id = ?`, [technician_id]);
+        db.close();
+        if (result.changes > 0) {
+            res.status(200).json({ message: 'Entry deleted successfully' });
         } else {
-            if (this.changes > 0) {
-                res.status(200).json({ message: 'Entry deleted successfully' });
-            } else {
-                res.status(404).send('Technician ID not found');
-            }
+            res.status(404).send('Technician ID not found');
         }
-    });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Error deleting entry for the provided technician ID');
+    } finally {
+        db.close();
+    }
 });
 
 export default router;

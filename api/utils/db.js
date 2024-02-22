@@ -1,7 +1,6 @@
-import sqlite3 from "sqlite3";
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { writeFile } from 'fs/promises';
-import s3fs from "s3fs";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { writeFile, readFile } from 'fs/promises';
+import sqlite3 from 'sqlite3';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -16,43 +15,34 @@ const s3Client = new S3Client({
 });
 
 const bucketName = process.env.CYCLIC_BUCKET_NAME;
-const databaseFileName = "database.db";
-
-const s3fsImpl = new s3fs(bucketName, {
-  region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  sessionToken: process.env.AWS_SESSION_TOKEN
-});
 
 const uploadDatabaseToS3 = async () => {
   try {
-    await s3fsImpl.writeFile(databaseFileName, ""); // Create an empty file to upload
+    // Write the database file to S3
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: "database.db",
+      Body: await readFile("database.db")
+    }));
+    
     console.log("Database uploaded to S3 successfully.");
   } catch (error) {
     console.error("Error uploading database to S3:", error);
-    throw error; // Rethrow the error to indicate failure
+    throw error;
   }
 };
 
 const downloadDatabaseFromS3 = async () => {
   try {
-    const data = await s3fsImpl.readFile(databaseFileName);
-    let bufferData;
+    // Download the database file from S3
+    const { Body } = await s3Client.send(new GetObjectCommand({
+      Bucket: bucketName,
+      Key: "database.db"
+    }));
 
-    // Check the type of data received
-    if (Buffer.isBuffer(data)) {
-      // If data is already a buffer, use it directly
-      bufferData = data;
-    } else if (typeof data === 'string') {
-      // If data is a string, convert it to a buffer
-      bufferData = Buffer.from(data);
-    } else {
-      // If data is neither a buffer nor a string, handle the error
-      throw new Error('Data received from S3 is not of expected type.');
-    }
+    // Write the downloaded database file locally
+    await writeFile("database.db", Body);
 
-    await writeFile(databaseFileName, bufferData); // Write buffer data to file
     console.log("Database downloaded from S3 successfully.");
   } catch (error) {
     console.error("Error downloading database from S3:", error);
@@ -60,14 +50,12 @@ const downloadDatabaseFromS3 = async () => {
   }
 };
 
-
-
 const fileExists = async (filePath) => {
   try {
-    await s3fsImpl.stat(filePath);
+    await readFile(filePath);
     return true;
   } catch (error) {
-    if (error.code === "NotFound") {
+    if (error.code === "ENOENT") {
       return false;
     } else {
       throw error;
@@ -77,17 +65,25 @@ const fileExists = async (filePath) => {
 
 const initializeDatabase = async () => {
   try {
-    const s3FileExists = await fileExists(databaseFileName);
-    if (!s3FileExists) {
-      console.log("Database file not found in S3, creating a new one.");
-      const db = new sqlite3.Database(databaseFileName);
-      db.close(); // Close the database connection
+    // Check if the database file exists locally
+    const localFileExists = await fileExists("database.db");
+
+    if (!localFileExists) {
+      console.log("Database file not found locally.");
       await uploadDatabaseToS3();
+    } else {
+      console.log("Database file found locally.");
     }
+
+    // Download the database file from S3
     await downloadDatabaseFromS3();
-    const db = new sqlite3.Database(databaseFileName);
+
+    // Connect to the SQLite database
+    const db = new sqlite3.Database("database.db");
+
     console.log('Connected to the database.');
     await createTables(db);
+
     return db;
   } catch (error) {
     console.error('Error initializing database:', error);

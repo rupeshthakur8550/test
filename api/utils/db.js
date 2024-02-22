@@ -3,8 +3,6 @@ import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import dotenv from 'dotenv';
 
-const { OPEN_READWRITE } = sqlite3;
-
 dotenv.config();
 
 const s3 = new S3Client({
@@ -39,89 +37,76 @@ const sql_create_address = `
     )
   `;
 
+// Modified open function to properly use sqlite3
+function openDatabase() {
+  return new sqlite3.Database(DB_FILE_PATH, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
+}
+
 // Create SQLite database and upload to S3
 async function createDatabase() {
-  return new Promise(async (resolve, reject) => {
-    const db = open({
-      filename: DB_FILE_PATH,
-      driver: sqlite3.Database,
-      mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
-    });
+  const db = openDatabase();
 
-    try {
-      // Execute SQL queries to create tables
-      await db.exec(sql_create_technician);
-      await db.exec(sql_create_address);
+  db.exec(sql_create_technician);
+  db.exec(sql_create_address);
 
-      console.log("Tables created successfully.");
+  console.log("Tables created successfully.");
 
-      // Close the database connection
-      db.close();
+  db.close();
 
-      // Upload database file to S3
-      const fileStream = fs.createReadStream(DB_FILE_PATH);
-      const uploadParams = {
-        Bucket: process.env.CYCLIC_BUCKET_NAME,
-        Key: DB_FILE_PATH,
-        Body: fileStream
-      };
-      s3.send(new PutObjectCommand(uploadParams)).then(data => {
-        console.log("Database file uploaded to S3 successfully.");
-        resolve();
-      }).catch(err => {
-        reject(err);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const fileStream = fs.createReadStream(DB_FILE_PATH);
+  const uploadParams = {
+    Bucket: process.env.CYCLIC_BUCKET_NAME,
+    Key: DB_FILE_PATH,
+    Body: fileStream
+  };
+
+  await s3.send(new PutObjectCommand(uploadParams));
+  console.log("Database file uploaded to S3 successfully.");
 }
 
 // Get database file from S3
 async function getDatabaseFromS3() {
-  return new Promise((resolve, reject) => {
-    const downloadParams = {
-      Bucket: process.env.CYCLIC_BUCKET_NAME,
-      Key: DB_FILE_PATH
-    };
-    s3.send(new GetObjectCommand(downloadParams)).then(data => {
-      const fileStream = fs.createWriteStream(DB_FILE_PATH);
-      data.Body.pipe(fileStream);
-      fileStream.on('close', () => {
-        console.log("Database file downloaded from S3.");
-        resolve();
-      });
-    }).catch(err => {
-      reject(err);
+  const downloadParams = {
+    Bucket: process.env.CYCLIC_BUCKET_NAME,
+    Key: DB_FILE_PATH
+  };
+
+  const data = await s3.send(new GetObjectCommand(downloadParams));
+  const fileStream = fs.createWriteStream(DB_FILE_PATH);
+  data.Body.pipe(fileStream);
+
+  await new Promise((resolve, reject) => {
+    fileStream.on('close', () => {
+      console.log("Database file downloaded from S3.");
+      resolve();
     });
+    fileStream.on('error', reject);
   });
 }
 
 // Connect to SQLite database
 async function connectToDatabase() {
-  return open({
-    filename: DB_FILE_PATH,
-    driver: sqlite3.Database,
-    mode: sqlite3.OPEN_READWRITE
-  });
+  return openDatabase();
 }
 
 // Update the modified database file on S3
 async function updateDatabaseOnS3() {
-  return new Promise((resolve, reject) => {
-    const fileStream = fs.createReadStream(DB_FILE_PATH);
-    const uploadParams = {
-      Bucket: process.env.CYCLIC_BUCKET_NAME,
-      Key: DB_FILE_PATH,
-      Body: fileStream
-    };
-    s3.send(new PutObjectCommand(uploadParams)).then(data => {
-      console.log("Updated database file uploaded to S3 successfully.");
-      resolve();
-    }).catch(err => {
-      reject(err);
-    });
-  });
+  const fileStream = fs.createReadStream(DB_FILE_PATH);
+  const uploadParams = {
+    Bucket: process.env.CYCLIC_BUCKET_NAME,
+    Key: DB_FILE_PATH,
+    Body: fileStream
+  };
+
+  await s3.send(new PutObjectCommand(uploadParams));
+  console.log("Updated database file uploaded to S3 successfully.");
 }
 
-export { connectToDatabase, createDatabase, getDatabaseFromS3, updateDatabaseOnS3 };
+// Run the functions sequentially
+async function main() {
+  await createDatabase();
+}
+
+main().catch(console.error);
+
+export default {connectToDatabase, getDatabaseFromS3, updateDatabaseOnS3};

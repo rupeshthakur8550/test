@@ -38,8 +38,20 @@ const uploadDatabaseToS3 = async () => {
 const downloadDatabaseFromS3 = async () => {
   try {
     const data = await s3fsImpl.readFile(databaseFileName);
-    // Convert data to buffer
-    const bufferData = Buffer.from(data);
+    let bufferData;
+
+    // Check the type of data received
+    if (Buffer.isBuffer(data)) {
+      // If data is already a buffer, use it directly
+      bufferData = data;
+    } else if (typeof data === 'string') {
+      // If data is a string, convert it to a buffer
+      bufferData = Buffer.from(data);
+    } else {
+      // If data is neither a buffer nor a string, handle the error
+      throw new Error('Data received from S3 is not of expected type.');
+    }
+
     await writeFile(databaseFileName, bufferData); // Write buffer data to file
     console.log("Database downloaded from S3 successfully.");
   } catch (error) {
@@ -47,6 +59,7 @@ const downloadDatabaseFromS3 = async () => {
     throw error;
   }
 };
+
 
 
 const fileExists = async (filePath) => {

@@ -1,5 +1,5 @@
 import express from 'express';
-import { db } from '../utils/db.js';
+import { initializeDatabase } from '../utils/db.js';
 
 const router = express.Router();
 
@@ -11,10 +11,10 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const Δφ = (lat2 - lat1) * Math.PI / 180;
   const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
             Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c; // Distance in meters
 }
@@ -60,37 +60,34 @@ function calculateShortestPath(locations) {
   return resultData;
 }
 
-const getAddressByTechnicianId = (technician_id, callback) => {
-  db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
-          FROM technician 
-          WHERE id = ?
-          UNION
-          SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
-          FROM address 
-          WHERE technician_id = ? 
-          ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
-    if (err) {
-      console.error(err.message);
-      callback(err, null);
-    } else {
-      callback(null, rows);
-    }
-  });
-};
-
 // Route to calculate shortest path
-router.get('/shortestpath/:technician_id', (req, res) => {
+router.get('/shortestpath/:technician_id', async (req, res) => {
   const technician_id = req.params.technician_id;
 
-  getAddressByTechnicianId(technician_id, (err, data) => {
-    if (err) {
-      res.status(500).json({ error: 'Error retrieving data from the address table' });
-    } else {
-      // Calculate shortest path
-      const shortestPath = calculateShortestPath(data);
-      res.status(200).json(shortestPath);
-    }
-  });
+  try {
+    const db = await initializeDatabase();
+
+    db.all(`SELECT location AS name, longitude AS lon, latitude AS lat, 'technician' AS type 
+            FROM technician 
+            WHERE id = ?
+            UNION
+            SELECT address AS name, longitude AS lon, latitude AS lat, 'address' AS type 
+            FROM address 
+            WHERE technician_id = ? 
+            ORDER BY type DESC`, [technician_id, technician_id], (err, rows) => {
+      if (err) {
+        console.error(err.message);
+        res.status(500).json({ error: 'Error retrieving data from the address table' });
+      } else {
+        // Calculate shortest path
+        const shortestPath = calculateShortestPath(rows);
+        res.status(200).json(shortestPath);
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error connecting to database' });
+  }
 });
 
 export default router;

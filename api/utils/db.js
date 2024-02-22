@@ -1,5 +1,6 @@
 import sqlite3 from 'sqlite3';
-import AWS from 'aws-sdk';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
@@ -13,11 +14,13 @@ const db = new sqlite3.Database('database.db', err => {
   createTables();
 });
 
-const s3 = new AWS.S3({
+const s3Client = new S3Client({
   region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  sessionToken: process.env.AWS_SESSION_TOKEN
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    sessionToken: process.env.AWS_SESSION_TOKEN
+  }
 });
 
 const bucketName = process.env.CYCLIC_BUCKET_NAME;
@@ -59,19 +62,20 @@ const createTables = () => {
 
   // Store the database file in AWS S3 bucket
   const fileContent = fs.readFileSync('database.db');
-  const params = {
+  const uploadParams = {
     Bucket: bucketName,
     Key: 'database.db',
-    Body: fileContent
+    Body: Readable.from(fileContent)
   };
 
-  s3.upload(params, (err, data) => {
-    if (err) {
+  s3Client.send(new PutObjectCommand(uploadParams)).then(
+    () => {
+      console.log('Database file uploaded to S3 successfully.');
+    },
+    err => {
       console.error('Error uploading to S3:', err);
-    } else {
-      console.log('Database file uploaded to S3 successfully:', data.Location);
     }
-  });
+  );
 };
 
 export default db;

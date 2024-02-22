@@ -65,7 +65,7 @@ const initializeDatabase = async () => {
     if (!s3FileExists) {
       console.log("Database file not found in S3, creating a new one.");
       const db = new sqlite3.Database(databaseFileName);
-      await db.close(); // Close the database connection
+      db.close(); // Close the database connection
       await uploadDatabaseToS3();
     }
     await downloadDatabaseFromS3();

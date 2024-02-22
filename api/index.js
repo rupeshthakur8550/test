@@ -2,6 +2,7 @@ import express from 'express';
 import addressRoutes from './routes/addressRoutes.js';
 import technicianRoutes from './routes/technicianRoutes.js';
 import shortestRoutes from './routes/shortestpath.js';
+import {initializeDatabase} from './utils/db.js'
 import cors from 'cors';
 
 const app = express();

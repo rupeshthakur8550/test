@@ -20,7 +20,7 @@ router.post('/address', async (req, res) => {
   try {
     const db = await initDB();
 
-    await db.run(`INSERT INTO address (address, longitude, latitude, technician_id) 
+    db.run(`INSERT INTO address (address, longitude, latitude, technician_id) 
       VALUES (?, ?, ?, ?)`, [address, longitude, latitude, technician_id]);
 
     res.status(201).json({ message: 'Data inserted into the address table' });
@@ -37,7 +37,7 @@ router.get('/address/:technician_id', async (req, res) => {
   try {
     const db = await initDB();
 
-    const rows = await db.all(`SELECT address, longitude, latitude FROM address WHERE technician_id = ?`, [technician_id]);
+    const rows = db.all(`SELECT address, longitude, latitude FROM address WHERE technician_id = ?`, [technician_id]);
 
     res.status(200).json(rows);
   } catch (err) {
@@ -53,7 +53,7 @@ router.delete('/address/:technician_id', async (req, res) => {
   try {
     const db = await initDB();
 
-    await db.run(`DELETE FROM address WHERE technician_id = ?`, [technician_id]);
+    db.run(`DELETE FROM address WHERE technician_id = ?`, [technician_id]);
 
     res.status(200).json({ message: 'Addresses deleted successfully' });
   } catch (err) {

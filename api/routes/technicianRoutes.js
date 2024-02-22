@@ -39,7 +39,7 @@ router.put('/technician/:technician_id/completion', async (req, res) => {
   try {
     const db = await initDB();
 
-    const result = await db.run(`UPDATE technician SET completion_status = 1 WHERE id = ?`, [technician_id]);
+    const result = db.run(`UPDATE technician SET completion_status = 1 WHERE id = ?`, [technician_id]);
     if (result.changes > 0) {
       res.status(200).json({ message: 'Completion status updated successfully' });
     } else {
@@ -58,7 +58,7 @@ router.delete('/technician/:technician_id', async (req, res) => {
   try {
     const db = await initDB();
 
-    const result = await db.run(`DELETE FROM technician WHERE id = ?`, [technician_id]);
+    const result = db.run(`DELETE FROM technician WHERE id = ?`, [technician_id]);
     if (result.changes > 0) {
       res.status(200).json({ message: 'Entry deleted successfully' });
     } else {

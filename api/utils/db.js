@@ -1,53 +1,21 @@
-import sqlite3 from 'sqlite3';
-import dotenv from 'dotenv';
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import fs from 'fs';
-import { promisify } from 'util';
+import sqlite3, {OPEN_READWRITE} from 'sqlite3';
+import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
-// Ensure correct file permissions
-const databasePath = 'database.db';
-const createWritablePermission = async () => {
-  try {
-    await fs.promises.access(databasePath, fs.constants.W_OK); // Check write permission
-  } catch (err) {
-    if (err.code === 'EACCES') {
-      console.error('Database file is not writable. Setting write permissions...');
-      await fs.promises.chmod(databasePath, 0o664); // Make writable by user and group
-    } else {
-      console.error(err.message);
-      throw err;
-    }
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    sessionToken: process.env.AWS_SESSION_TOKEN
   }
-};
+});
 
-// Open the SQLite database in read-write mode
-const openDatabase = async () => {
-  try {
-    await createWritablePermission(); // Ensure write permission
-
-    const db = await new Promise((resolve, reject) => {
-      const connection = new sqlite3.Database(databasePath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(connection);
-        }
-      });
-    });
-
-    console.log('Connected to the database.');
-    return db;
-  } catch (err) {
-    console.error('Error opening database:', err.message);
-    throw err;
-  }
-};
-
-// Create tables (you can add your table creation logic here)
-const createTables = async (db) => {
-  const sql_create_technician = `
+const DB_FILE_PATH = 'database.db';
+const sql_create_technician = `
     CREATE TABLE IF NOT EXISTS technician (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       location TEXT NOT NULL,
@@ -57,7 +25,7 @@ const createTables = async (db) => {
     )
   `;
 
-  const sql_create_address = `
+const sql_create_address = `
     CREATE TABLE IF NOT EXISTS address (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       address TEXT NOT NULL,
@@ -69,33 +37,89 @@ const createTables = async (db) => {
     )
   `;
 
-  await db.exec(sql_create_technician, err => {
-    if (err) {
-      console.error(err.message);
+// Create SQLite database and upload to S3
+async function createDatabase() {
+  return new Promise(async (resolve, reject) => {
+    const db = open({
+      filename: DB_FILE_PATH,
+      driver: sqlite3.Database,
+      mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
+    });
+
+    try {
+      // Execute SQL queries to create tables
+      await db.exec(sql_create_technician);
+      await db.exec(sql_create_address);
+
+      console.log("Tables created successfully.");
+
+      // Close the database connection
+      db.close();
+
+      // Upload database file to S3
+      const fileStream = fs.createReadStream(DB_FILE_PATH);
+      const uploadParams = {
+        Bucket: process.env.CYCLIC_BUCKET_NAME,
+        Key: DB_FILE_PATH,
+        Body: fileStream
+      };
+      s3.send(new PutObjectCommand(uploadParams)).then(data => {
+        console.log("Database file uploaded to S3 successfully.");
+        resolve();
+      }).catch(err => {
+        reject(err);
+      });
+    } catch (err) {
+      reject(err);
     }
   });
+}
 
-  await db.exec(sql_create_address, err => {
-    if (err) {
-      console.error(err.message);
-    }
+// Get database file from S3
+async function getDatabaseFromS3() {
+  return new Promise((resolve, reject) => {
+    const downloadParams = {
+      Bucket: process.env.CYCLIC_BUCKET_NAME,
+      Key: DB_FILE_PATH
+    };
+    s3.send(new GetObjectCommand(downloadParams)).then(data => {
+      const fileStream = fs.createWriteStream(DB_FILE_PATH);
+      data.Body.pipe(fileStream);
+      fileStream.on('close', () => {
+        console.log("Database file downloaded from S3.");
+        resolve();
+      });
+    }).catch(err => {
+      reject(err);
+    });
   });
-};
+}
 
-const getDatabase = async () => {
-  let db;
-  try {
-    db = await openDatabase();
-    await createTables(db); // Execute table creation
-    // Other initialization if needed
-    return db;
-  } catch (err) {
-    console.error('Error:', err.message);
-    if (db) {
-      await db.close();
-    }
-    throw err;
-  }
-};
+// Connect to SQLite database
+async function connectToDatabase() {
+  return open({
+    filename: DB_FILE_PATH,
+    driver: sqlite3.Database,
+    mode: sqlite3.OPEN_READWRITE
+  });
+}
 
-export default getDatabase;
+// Update the modified database file on S3
+async function updateDatabaseOnS3() {
+  return new Promise((resolve, reject) => {
+    const fileStream = fs.createReadStream(DB_FILE_PATH);
+    const uploadParams = {
+      Bucket: process.env.CYCLIC_BUCKET_NAME,
+      Key: DB_FILE_PATH,
+      Body: fileStream
+    };
+    s3.send(new PutObjectCommand(uploadParams)).then(data => {
+      console.log("Updated database file uploaded to S3 successfully.");
+      resolve();
+    }).catch(err => {
+      reject(err);
+    });
+  });
+}
+
+export { connectToDatabase, createDatabase, getDatabaseFromS3, updateDatabaseOnS3 };

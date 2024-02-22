@@ -38,13 +38,16 @@ const uploadDatabaseToS3 = async () => {
 const downloadDatabaseFromS3 = async () => {
   try {
     const data = await s3fsImpl.readFile(databaseFileName);
-    await writeFile(databaseFileName, data);
+    // Convert data to buffer
+    const bufferData = Buffer.from(data);
+    await writeFile(databaseFileName, bufferData); // Write buffer data to file
     console.log("Database downloaded from S3 successfully.");
   } catch (error) {
     console.error("Error downloading database from S3:", error);
-    throw error; // Rethrow the error to indicate failure
+    throw error;
   }
 };
+
 
 const fileExists = async (filePath) => {
   try {

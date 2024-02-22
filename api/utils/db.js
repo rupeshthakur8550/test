@@ -1,32 +1,52 @@
 import sqlite3 from 'sqlite3';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { Readable } from 'stream';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import { promisify } from 'util';
 
+// Load environment variables
 dotenv.config();
 
-// Open the SQLite database file in read-write mode
-const db = new sqlite3.Database('database.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
-  if (err) {
-    console.error(err.message);
+// Ensure correct file permissions
+const databasePath = 'database.db';
+const createWritablePermission = async () => {
+  try {
+    await fs.promises.access(databasePath, fs.constants.W_OK); // Check write permission
+  } catch (err) {
+    if (err.code === 'EACCES') {
+      console.error('Database file is not writable. Setting write permissions...');
+      await fs.promises.chmod(databasePath, 0o664); // Make writable by user and group
+    } else {
+      console.error(err.message);
+      throw err;
+    }
   }
-  console.log('Connected to the database.');
-  createTables();
-});
+};
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    sessionToken: process.env.AWS_SESSION_TOKEN
+// Open the SQLite database in read-write mode
+const openDatabase = async () => {
+  try {
+    await createWritablePermission(); // Ensure write permission
+
+    const db = await new Promise((resolve, reject) => {
+      const connection = new sqlite3.Database(databasePath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(connection);
+        }
+      });
+    });
+
+    console.log('Connected to the database.');
+    return db;
+  } catch (err) {
+    console.error('Error opening database:', err.message);
+    throw err;
   }
-});
+};
 
-const bucketName = process.env.CYCLIC_BUCKET_NAME;
-
-const createTables = () => {
+// Create tables (you can add your table creation logic here)
+const createTables = async (db) => {
   const sql_create_technician = `
     CREATE TABLE IF NOT EXISTS technician (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,34 +69,33 @@ const createTables = () => {
     )
   `;
 
-  db.exec(sql_create_technician, err => {
+  await db.exec(sql_create_technician, err => {
     if (err) {
       console.error(err.message);
     }
   });
 
-  db.exec(sql_create_address, err => {
+  await db.exec(sql_create_address, err => {
     if (err) {
       console.error(err.message);
     }
   });
-
-  // Store the database file in AWS S3 bucket
-  const fileContent = fs.readFileSync('database.db');
-  const uploadParams = {
-    Bucket: bucketName,
-    Key: 'database.db',
-    Body: Readable.from(fileContent)
-  };
-
-  s3Client.send(new PutObjectCommand(uploadParams)).then(
-    () => {
-      console.log('Database file uploaded to S3 successfully.');
-    },
-    err => {
-      console.error('Error uploading to S3:', err);
-    }
-  );
 };
 
-export default db;
+const getDatabase = async () => {
+  let db;
+  try {
+    db = await openDatabase();
+    await createTables(db); // Execute table creation
+    // Other initialization if needed
+    return db;
+  } catch (err) {
+    console.error('Error:', err.message);
+    if (db) {
+      await db.close();
+    }
+    throw err;
+  }
+};
+
+export default getDatabase;

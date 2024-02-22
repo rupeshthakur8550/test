@@ -1,5 +1,5 @@
 import express from 'express';
-import db from './utils/db.js';
+import getDatabase from './utils/db.js';
 import addressRoutes from './routes/addressRoutes.js'
 import technicianROutes from './routes/technicianRoutes.js'
 import shortestpath from './routes/shortestpath.js'

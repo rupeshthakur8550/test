@@ -1,6 +1,6 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { writeFile, readFile } from 'fs/promises';
 import sqlite3 from 'sqlite3';
+import { Readable } from 'stream';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -16,13 +16,15 @@ const s3Client = new S3Client({
 
 const bucketName = process.env.CYCLIC_BUCKET_NAME;
 
-const uploadDatabaseToS3 = async () => {
+const uploadDatabaseToS3 = async (db) => {
   try {
     // Write the database file to S3
+    const dbStream = db.backup();
+
     await s3Client.send(new PutObjectCommand({
       Bucket: bucketName,
       Key: "database.db",
-      Body: await readFile("database.db")
+      Body: dbStream
     }));
     
     console.log("Database uploaded to S3 successfully.");
@@ -40,49 +42,35 @@ const downloadDatabaseFromS3 = async () => {
       Key: "database.db"
     }));
 
-    // Write the downloaded database file locally
-    await writeFile("database.db", Body);
+    // Create a readable stream from the S3 response body
+    const dbStream = Readable.from(Body);
+
+    // Connect to an in-memory SQLite database
+    const db = new sqlite3.Database(":memory:");
+    
+    // Restore the database from the stream
+    await new Promise((resolve, reject) => {
+      dbStream.pipe(db.backup()).on('finish', resolve).on('error', reject);
+    });
 
     console.log("Database downloaded from S3 successfully.");
+
+    return db;
   } catch (error) {
     console.error("Error downloading database from S3:", error);
     throw error;
   }
 };
 
-const fileExists = async (filePath) => {
-  try {
-    await readFile(filePath);
-    return true;
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return false;
-    } else {
-      throw error;
-    }
-  }
-};
-
 const initializeDatabase = async () => {
   try {
-    // Check if the database file exists locally
-    const localFileExists = await fileExists("database.db");
+    // Initialize the database by downloading from S3
+    const db = await downloadDatabaseFromS3();
 
-    if (!localFileExists) {
-      console.log("Database file not found locally.");
-      await uploadDatabaseToS3();
-    } else {
-      console.log("Database file found locally.");
-    }
-
-    // Download the database file from S3
-    await downloadDatabaseFromS3();
-
-    // Connect to the SQLite database
-    const db = new sqlite3.Database("database.db");
+    // Create tables if they don't exist
+    await createTables(db);
 
     console.log('Connected to the database.');
-    await createTables(db);
 
     return db;
   } catch (error) {
